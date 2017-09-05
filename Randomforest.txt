@@ -1,0 +1,72 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+df_train=pd.read_csv(r"C:\Users\ashis\Downloads\train.csv")
+df_test=pd.read_csv(r"C:\Users\ashis\Downloads\test.csv")
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import GridSearchCV
+print (df_train.shape)
+print (df_test.shape)
+#separating target variable
+Y=df_train["y"]
+X_train=df_train.drop("y",axis=1)
+#checking for missing values and getting column names which are missing
+Missing=pd.isnull(X_train).sum().reset_index()
+Missing.columns=["columns","values"]
+Missing_columns=Missing[Missing["values"]>0]["columns"].tolist()
+print (Missing_columns)#fortunately there are no missing  values
+#checking the variables which have only one unique value 
+def uniquevalues(df):
+    df1=df.copy()
+    unique_val_col=[]
+    for col in df1.columns:
+        if df1[col].nunique()==1:   
+            unique_val_col.append(col)
+    return unique_val_col
+unique_col_list=uniquevalues(X_train)
+print (unique_col_list)
+#while using trees theese variables don't contribute much to the model and check using variable importance measures using randomforest and xgboost
+#dropping the id variable as it is just the unique identification given to each observation
+X_train=X_train.drop("ID",axis=1)
+#checking the count of categories of each categorical variables
+def categoricalvariables(df):
+    df2=df.copy()
+    category=[]
+    for col in df2.columns:
+        if df2[col].dtype==object:
+            category.append(col)
+    return category
+categorical_variables=categoricalvariables(X_train)
+print (categorical_variables)
+#after one hot encoding how many new columns will be added.
+df_categorical=X_train[categorical_variables].copy()
+categories=df_categorical.apply(lambda x:x.value_counts())
+count_categories=categories.apply(lambda x:x.count()).reset_index()
+count_categories.columns=["categories","count"]
+print (len(X_train.columns)+int(count_categories["count"].sum())-len(categorical_variables))
+#one hot encoding of train and test data sets
+X_train=pd.get_dummies(X_train)
+df_test=pd.get_dummies(df_test).reindex(columns=X_train.columns,fill_value=0)
+print (len(X_train.columns))
+print (len(df_test.columns))#As expected we got the same columns in test and train data set
+#tuning hyperparameters
+clf=RandomForestRegressor(random_state=0)
+param_grid={"n_estimators":[100,200,300],"max_depth":range(5,11),"max_features":["sqrt","log2"],"min_samples_leaf":[5,15,40,60,100]}
+gridsearch=GridSearchCV(clf,param_grid=param_grid,scoring="r2",cv=10,n_jobs=-1)
+model=gridsearch.fit(X_train,Y)
+print (model.best_params_)
+print (model.best_score_)
+#plotting the variable importance graphs
+feature_dict={}
+for a,b in zip(X_train.columns,feature_importances):
+    feature_dict[a]=b
+Feature_df=pd.DataFrame.from_dict(feature_dict,orient="index")
+Feature_df.columns=["importance_values"]
+df_sorted_feature=Feature_df.sort_values(by="importance_values",ascending=False)
+subset=df_sorted_feature[df_sorted_feature["importance_values"]<=0]
+print(subset)
+plt.figure(figsize=(20,10))
+plt.bar(range(len(subset.index)),subset["importance_values"],width=0.4)
+plt.xticks(range(len(subset.index)),subset.index,rotation=90)
+plt.show()
+#as we can see the unique value columns dont contribute to the model and can be removed
+#there are many other features which needs further analysis
